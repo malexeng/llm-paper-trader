@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LLM Paper Trader — AI Agent</title>
+<style>
+:root{
+  --bg:#06060d;--card:#0d0d1a;--card2:#0f0f20;--border:#181830;
+  --accent:#00d4ff;--green:#00ff99;--red:#ff3355;--yellow:#ffd700;
+  --purple:#c084fc;--orange:#fb923c;--text:#e0e0f4;--muted:#404060;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Courier New',monospace;font-size:13px;}
+
+/* HEADER */
+header{
+  background:var(--card);border-bottom:1px solid var(--border);
+  padding:11px 22px;display:flex;align-items:center;
+  justify-content:space-between;position:sticky;top:0;z-index:100;
+}
+.logo{font-size:18px;font-weight:900;letter-spacing:3px;}
+.logo .v{color:var(--purple);}
+.logo .t{color:var(--accent);}
+.logo .sub{color:var(--muted);font-size:10px;font-weight:normal;letter-spacing:2px;margin-left:10px;}
+.header-right{display:flex;align-items:center;gap:12px;}
+.badge{padding:3px 10px;border-radius:20px;font-size:10px;font-weight:bold;letter-spacing:1px;}
+.badge-paper{background:rgba(255,215,0,.1);color:var(--yellow);border:1px solid var(--yellow);}
+.badge-live {background:rgba(255,51,85,.1);color:var(--red);border:1px solid var(--red);}
+.llm-pill{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);}
+.llm-dot{width:6px;height:6px;border-radius:50%;}
+.llm-on{background:var(--green);animation:pulse 2s infinite;}
+.llm-off{background:var(--red);}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.uptime{color:var(--muted);font-size:11px;}
+
+/* CONTROL BAR */
+.ctrl{
+  background:var(--card);border-bottom:1px solid var(--border);
+  padding:12px 22px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+}
+.btn{
+  padding:9px 22px;border:none;border-radius:5px;cursor:pointer;
+  font-family:'Courier New',monospace;font-weight:bold;font-size:12px;
+  letter-spacing:1px;transition:filter .15s;
+}
+.btn:hover{filter:brightness(1.2);}
+.btn-start {background:var(--green);color:#000;}
+.btn-stop  {background:var(--red);color:#fff;}
+.btn-pause {background:var(--yellow);color:#000;}
+.btn-resume{background:var(--orange);color:#000;}
+.status-pill{
+  padding:5px 14px;border-radius:20px;font-size:10px;font-weight:bold;
+  letter-spacing:1px;display:flex;align-items:center;gap:5px;
+}
+.s-idle   {background:rgba(100,100,130,.15);color:var(--muted);}
+.s-run    {background:rgba(0,255,153,.07);color:var(--green);border:1px solid rgba(0,255,153,.2);}
+.s-paused {background:rgba(255,215,0,.07);color:var(--yellow);border:1px solid rgba(255,215,0,.2);}
+.s-stopped{background:rgba(255,51,85,.07);color:var(--red);border:1px solid rgba(255,51,85,.2);}
+.sdot{width:6px;height:6px;border-radius:50%;}
+
+/* PRICE TICKER */
+.tickers{display:flex;gap:8px;padding:10px 22px;flex-wrap:wrap;background:rgba(0,0,0,.3);}
+.ticker{background:var(--card);border:1px solid var(--border);border-radius:5px;padding:7px 14px;display:flex;align-items:center;gap:8px;}
+.tick-sym{color:var(--muted);font-size:10px;}
+.tick-price{font-size:15px;font-weight:bold;color:var(--accent);}
+
+/* MAIN LAYOUT */
+.main{display:grid;grid-template-columns:1fr 380px;gap:10px;padding:10px 22px;}
+@media(max-width:900px){.main{grid-template-columns:1fr;}}
+.left{display:flex;flex-direction:column;gap:10px;}
+.right{display:flex;flex-direction:column;gap:10px;}
+
+/* STAT CARDS */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:12px;}
+.card-lbl{color:var(--muted);font-size:9px;letter-spacing:1px;text-transform:uppercase;margin-bottom:5px;}
+.card-val{font-size:20px;font-weight:bold;color:var(--accent);}
+.g{color:var(--green)!important;} .r{color:var(--red)!important;}
+.y{color:var(--yellow)!important;} .p{color:var(--purple)!important;}
+
+/* PANELS */
+.panel{background:var(--card);border:1px solid var(--border);border-radius:7px;overflow:hidden;}
+.ph{padding:9px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+.ph-title{font-weight:bold;font-size:11px;letter-spacing:1px;}
+.ph-count{color:var(--muted);font-size:10px;}
+table{width:100%;border-collapse:collapse;}
+th{padding:7px 10px;color:var(--muted);font-size:9px;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--border);text-align:left;}
+td{padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.02);font-size:11px;vertical-align:top;}
+tr:last-child td{border:none;}
+tr:hover td{background:rgba(255,255,255,.02);}
+.empty{color:var(--muted);text-align:center;padding:18px;font-size:11px;}
+
+/* LLM REASONING FEED */
+.reasoning-feed{max-height:420px;overflow-y:auto;padding:8px;}
+.reasoning-entry{
+  background:var(--card2);border:1px solid var(--border);
+  border-radius:5px;padding:10px 12px;margin-bottom:7px;
+}
+.re-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.re-pair{font-weight:bold;font-size:11px;color:var(--accent);}
+.re-time{color:var(--muted);font-size:9px;}
+.re-action{padding:2px 8px;border-radius:10px;font-size:10px;font-weight:bold;margin-left:6px;}
+.act-buy {background:rgba(0,255,153,.15);color:var(--green);}
+.act-sell{background:rgba(255,51,85,.15);color:var(--red);}
+.act-hold{background:rgba(100,100,130,.15);color:var(--muted);}
+.re-conf{color:var(--yellow);font-size:10px;margin-bottom:5px;}
+.re-text{color:#a0a0c0;font-size:11px;line-height:1.5;}
+.conf-bar{
+  height:3px;border-radius:2px;margin-top:7px;
+  background:linear-gradient(90deg,var(--green),var(--yellow),var(--red));
+  position:relative;overflow:hidden;
+}
+.conf-fill{height:100%;background:var(--muted);position:absolute;right:0;top:0;}
+
+/* POSITIONS */
+.pos-card{
+  background:var(--card2);border-radius:5px;padding:10px;
+  margin:4px 8px;border:1px solid var(--border);
+}
+.pos-header{display:flex;justify-content:space-between;margin-bottom:4px;}
+.pos-pair{font-weight:bold;color:var(--accent);}
+.pos-side-long{color:var(--green);font-size:10px;}
+.pos-side-short{color:var(--red);font-size:10px;}
+.pos-meta{color:var(--muted);font-size:10px;line-height:1.6;}
+.pos-reason{color:#7070a0;font-size:10px;margin-top:4px;font-style:italic;}
+
+footer{text-align:center;color:var(--muted);padding:14px;font-size:10px;letter-spacing:1px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="v">LLM</span> <span class="t">PAPER TRADER</span>
+    <span class="sub">AI AGENT</span>
+  </div>
+  <div class="header-right">
+    <div class="llm-pill">
+      <div class="llm-dot llm-off" id="llm-dot"></div>
+      <span id="llm-label">LLM —</span>
+    </div>
+    <span class="uptime" id="uptime">0h 0m 0s</span>
+    <span class="badge badge-paper" id="mode-badge">PAPER</span>
+  </div>
+</header>
+
+<!-- Control -->
+<div class="ctrl">
+  <button class="btn btn-start"  onclick="ctrl('start')">▶ START</button>
+  <button class="btn btn-stop"   onclick="ctrl('stop')">■ STOP</button>
+  <button class="btn btn-pause"  onclick="ctrl('pause')">⏸ PAUSE</button>
+  <button class="btn btn-resume" onclick="ctrl('resume')">↺ RESUME</button>
+  <div class="status-pill s-idle" id="status-pill">
+    <div class="sdot" id="sdot" style="background:var(--muted)"></div>
+    <span id="status-text">IDLE</span>
+  </div>
+</div>
+
+<!-- Tickers -->
+<div class="tickers" id="tickers">
+  <div class="ticker"><span class="tick-sym">Connecting...</span></div>
+</div>
+
+<!-- Main -->
+<div class="main">
+<div class="left">
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="card"><div class="card-lbl">Total P&L</div><div class="card-val" id="total-pnl">$0.00</div></div>
+    <div class="card"><div class="card-lbl">Daily P&L</div><div class="card-val" id="daily-pnl">$0.00</div></div>
+    <div class="card"><div class="card-lbl">Win Rate</div><div class="card-val y" id="win-rate">—%</div></div>
+    <div class="card"><div class="card-lbl">Total Trades</div><div class="card-val p" id="total-trades">0</div></div>
+    <div class="card"><div class="card-lbl">Open Positions</div><div class="card-val" id="open-pos">0</div></div>
+    <div class="card"><div class="card-lbl">Consec. Loss</div><div class="card-val" id="consec">0</div></div>
+  </div>
+
+  <!-- Open Positions -->
+  <div class="panel">
+    <div class="ph">
+      <span class="ph-title">📊 OPEN POSITIONS</span>
+      <span class="ph-count" id="pos-count">0</span>
+    </div>
+    <div id="positions-body">
+      <div class="empty">No open positions</div>
+    </div>
+  </div>
+
+  <!-- Trade History -->
+  <div class="panel">
+    <div class="ph">
+      <span class="ph-title">📋 TRADE HISTORY</span>
+      <span class="ph-count" id="hist-count">0</span>
+    </div>
+    <table>
+      <thead><tr><th>ID</th><th>Pair</th><th>Side</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Status</th></tr></thead>
+      <tbody id="history-body"><tr><td colspan="7" class="empty">No trades yet</td></tr></tbody>
+    </table>
+  </div>
+
+</div>
+<div class="right">
+
+  <!-- LLM Reasoning Feed -->
+  <div class="panel" style="flex:1;">
+    <div class="ph">
+      <span class="ph-title">🧠 AI REASONING</span>
+      <span class="ph-count" id="reasoning-count">0</span>
+    </div>
+    <div class="reasoning-feed" id="reasoning-feed">
+      <div class="empty">Waiting for LLM analysis...</div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<footer>LLM PAPER TRADER v1.0 — Local LLM Agent — Paper Mode Active</footer>
+
+<script>
+async function ctrl(action){
+  await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})});
+}
+
+function setStatus(running, paused){
+  const pill=document.getElementById('status-pill');
+  const dot=document.getElementById('sdot');
+  const txt=document.getElementById('status-text');
+  if(paused){
+    pill.className='status-pill s-paused'; dot.style.background='var(--yellow)'; txt.textContent='PAUSED';
+  } else if(running){
+    pill.className='status-pill s-run'; dot.style.background='var(--green)'; txt.textContent='RUNNING';
+    dot.style.animation='pulse 1.5s infinite';
+  } else {
+    pill.className='status-pill s-idle'; dot.style.background='var(--muted)'; txt.textContent='IDLE';
+    dot.style.animation='none';
+  }
+}
+
+async function fetchStatus(){
+  try{
+    const r=await fetch('/api/status'); const d=await r.json();
+    document.getElementById('uptime').textContent=d.uptime||'—';
+
+    const badge=document.getElementById('mode-badge');
+    badge.textContent=d.mode; badge.className='badge '+(d.mode==='PAPER'?'badge-paper':'badge-live');
+
+    // LLM status
+    const lDot=document.getElementById('llm-dot');
+    const lLbl=document.getElementById('llm-label');
+    if(d.llm_status==='online'){lDot.className='llm-dot llm-on';lLbl.textContent='LLM '+d.llm_model;}
+    else{lDot.className='llm-dot llm-off';lLbl.textContent='LLM OFFLINE';}
+
+    setStatus(d.running, d.paused);
+
+    const s=d.stats||{};
+    const pnl=s.total_pnl||0, dpnl=s.daily_pnl||0;
+    const pnlEl=document.getElementById('total-pnl');
+    pnlEl.textContent='$'+pnl.toFixed(4); pnlEl.className='card-val '+(pnl>=0?'g':'r');
+    const dpEl=document.getElementById('daily-pnl');
+    dpEl.textContent='$'+dpnl.toFixed(4); dpEl.className='card-val '+(dpnl>=0?'g':'r');
+    document.getElementById('win-rate').textContent=(s.win_rate||0)+'%';
+    document.getElementById('total-trades').textContent=s.total_closed||0;
+    document.getElementById('open-pos').textContent=s.open_positions||0;
+    const cl=document.getElementById('consec');
+    cl.textContent=s.consecutive_losses||0;
+    cl.className='card-val '+(s.consecutive_losses>2?'r':s.consecutive_losses>0?'y':'g');
+    if(s.halted){document.getElementById('status-text').textContent='HALTED ⚠️';}
+
+    // Prices
+    const tRow=document.getElementById('tickers');
+    const prices=d.prices||{};
+    if(Object.keys(prices).length){
+      tRow.innerHTML=Object.entries(prices).map(([sym,data])=>`
+        <div class="ticker">
+          <span class="tick-sym">${sym}</span>
+          <span class="tick-price">$${data.price}</span>
+        </div>`).join('');
+    }
+  }catch(e){}
+}
+
+async function fetchReasoning(){
+  try{
+    const r=await fetch('/api/reasoning'); const items=await r.json();
+    document.getElementById('reasoning-count').textContent=items.length;
+    const feed=document.getElementById('reasoning-feed');
+    if(!items.length){feed.innerHTML='<div class="empty">Waiting for LLM analysis...</div>';return;}
+
+    feed.innerHTML=items.slice(0,20).map(item=>{
+      const d=new Date(item.ts);
+      const timeStr=d.toLocaleTimeString();
+      const actCls=item.action==='BUY'?'act-buy':item.action==='SELL'?'act-sell':'act-hold';
+      const conf=item.confidence||0;
+      const fillPct=100-conf;
+      return `
+      <div class="reasoning-entry">
+        <div class="re-header">
+          <div>
+            <span class="re-pair">${item.pair}</span>
+            <span class="re-action ${actCls}">${item.action}</span>
+          </div>
+          <span class="re-time">${timeStr}</span>
+        </div>
+        <div class="re-conf">Confidence: ${conf}% | $${(item.price||0).toFixed(2)}</div>
+        <div class="re-text">${item.reasoning||'No reasoning provided'}</div>
+        <div class="conf-bar">
+          <div class="conf-fill" style="width:${fillPct}%"></div>
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){}
+}
+
+async function fetchPositions(){
+  try{
+    const r=await fetch('/api/positions'); const items=await r.json();
+    document.getElementById('pos-count').textContent=items.length;
+    const body=document.getElementById('positions-body');
+    if(!items.length){body.innerHTML='<div class="empty">No open positions</div>';return;}
+    body.innerHTML=items.map(p=>`
+      <div class="pos-card">
+        <div class="pos-header">
+          <span class="pos-pair">${p.pair}</span>
+          <span class="${p.side==='long'?'pos-side-long':'pos-side-short'}">${p.side.toUpperCase()} | conf ${p.confidence}%</span>
+        </div>
+        <div class="pos-meta">
+          Entry: $${p.entry?.toFixed(4)} | SL: $${p.sl?.toFixed(4)} | TP: $${p.tp?.toFixed(4)}<br>
+          Size: $${p.size?.toFixed(2)} | ID: ${p.id}
+        </div>
+        <div class="pos-reason">"${p.reasoning}"</div>
+      </div>`).join('');
+  }catch(e){}
+}
+
+async function fetchHistory(){
+  try{
+    const r=await fetch('/api/history'); const items=await r.json();
+    document.getElementById('hist-count').textContent=items.length;
+    const body=document.getElementById('history-body');
+    if(!items.length){body.innerHTML='<tr><td colspan="7" class="empty">No trades yet</td></tr>';return;}
+    body.innerHTML=items.slice(0,20).map(t=>{
+      const pnl=t.pnl||0;
+      const pc=pnl>=0?'g':'r';
+      const sc=t.status==='CLOSED_TP'?'g':t.status==='CLOSED_SL'?'r':'';
+      return `<tr>
+        <td>${t.id}</td>
+        <td>${t.pair}</td>
+        <td class="${t.side==='long'?'g':'r'}">${t.side?.toUpperCase()}</td>
+        <td>$${t.entry?.toFixed(3)||'—'}</td>
+        <td>$${t.exit?.toFixed(3)||'—'}</td>
+        <td class="${pc}">$${pnl.toFixed(4)}</td>
+        <td class="${sc}" style="font-size:10px">${t.status?.replace('CLOSED_','')}</td>
+      </tr>`;
+    }).join('');
+  }catch(e){}
+}
+
+setInterval(fetchStatus,1000);
+setInterval(fetchReasoning,2000);
+setInterval(fetchPositions,2000);
+setInterval(fetchHistory,3000);
+fetchStatus();fetchReasoning();fetchPositions();fetchHistory();
+</script>
+</body>
+</html>
